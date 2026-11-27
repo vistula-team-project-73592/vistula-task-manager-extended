@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Statistics</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Task Statistics</h1>
+            <nav>
+                <a href="index.html">Tasks</a>
+                <a href="statistics.html" class="active">Statistics</a>
+                <a href="info.json" target="_blank">App Info</a>
+            </nav>
+        </header>
+
+        <section class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>Overview</h2>
+                <button id="refresh-btn">Refresh Statistics</button>
+            </div>
+            <p><strong>Implemented by Student ID:</strong> 73991</p>
+            <ul>
+                <li>Total number of tasks: <strong id="total-tasks">0</strong></li>
+                <li>Completed tasks: <strong id="completed-tasks">0</strong></li>
+                <li>Incomplete tasks: <strong id="incomplete-tasks">0</strong></li>
+                <li>Percentage completed: <strong id="completed-percent">0%</strong></li>
+            </ul>
+        </section>
+
+        <section class="card">
+            <h2>Tasks per Category</h2>
+            <ul id="category-stats"></ul>
+        </section>
+    </div>
+
+    <script>
+        let API_BASE = "";
+        let API_HEADERS = {};
+
+        async function init() {
+            const res = await fetch("config.json");
+            const config = await res.json();
+
+            const base = config.supabaseUrl.replace(/\/+$/, "");
+            API_BASE = base.endsWith("/rest/v1") ? base : `${base}/rest/v1`;
+
+            API_HEADERS = {
+                "apikey": config.supabaseAnonKey,
+                "Content-Type": "application/json"
+            };
+            if (config.supabaseAnonKey.startsWith("eyJ")) {
+                API_HEADERS["Authorization"] = `Bearer ${config.supabaseAnonKey}`;
+            }
+
+            await loadStatistics();
+        }
+
+        async function loadStatistics() {
+            const [tasksRes, catsRes] = await Promise.all([
+                fetch(`${API_BASE}/tasks?select=*,categories(name)`, { headers: API_HEADERS }),
+                fetch(`${API_BASE}/categories?select=*`, { headers: API_HEADERS })
+            ]);
+
+            const tasks = await tasksRes.json();
+            const categories = await catsRes.json();
+
+            const total = tasks.length;
+            const completed = tasks.filter(t => t.completed).length;
+            const incomplete = total - completed;
+            const percent = total === 0 ? 0 : ((completed / total) * 100).toFixed(1);
+
+            document.getElementById("total-tasks").textContent = total;
+            document.getElementById("completed-tasks").textContent = completed;
+            document.getElementById("incomplete-tasks").textContent = incomplete;
+            document.getElementById("completed-percent").textContent = `${percent}%`;
+
+            const counts = {};
+            categories.forEach(c => { counts[c.name] = 0; });
+            tasks.forEach(t => {
+                const name = t.categories ? t.categories.name : "Uncategorized";
+                counts[name] = (counts[name] || 0) + 1;
+            });
+
+            const list = document.getElementById("category-stats");
+            list.innerHTML = "";
+            for (const [catName, count] of Object.entries(counts)) {
+                const li = document.createElement("li");
+                li.innerHTML = `${catName}: <strong>${count}</strong>`;
+                list.appendChild(li);
+            }
+        }
+
+        document.getElementById("refresh-btn").addEventListener("click", loadStatistics);
+        init();
+    </script>
+</body>
+</html>
